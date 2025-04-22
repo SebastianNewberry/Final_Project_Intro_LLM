@@ -1,63 +1,60 @@
 \documentclass[11pt]{article}
 
-% Packages
+% ---------- Packages ----------
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage{times}                % Times font
-\usepackage{amsmath, amssymb}     % Math symbols
-\usepackage{enumitem}             % Customizable lists
-\usepackage{graphicx}            % Images
-\usepackage{titlesec}             % Custom section titles
-\usepackage{geometry}             % Margins
-\geometry{margin=1in}
-\usepackage{setspace}             % Line spacing
-\setstretch{1.15}                 % Slightly looser spacing
+\usepackage{times}
+\usepackage{amsmath, amssymb}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{titlesec}
+\usepackage{geometry}
+\usepackage{setspace}
 \usepackage{fancyhdr}
+\usepackage{titling}
+\usepackage{abstract}
+\usepackage{wrapfig}
 
-% Section formatting
+% ---------- Geometry ----------
+\geometry{
+  top=0.9in,
+  bottom=1in,
+  left=0.9in,
+  right=0.9in
+}
+
+% ---------- Header ----------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Sebastian Newberry, Endri Islami, Parth Gajula}
+\fancyhead[R]{April 28, 2025}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ---------- Title Customization ----------
+\pretitle{\begin{center}\Large\bfseries\rule{\linewidth}{0.8pt}\\[0.5em]}
+\posttitle{\\[0.5em]\rule{\linewidth}{0.8pt}\end{center}}
+\preauthor{\begin{center}\normalsize}
+\postauthor{\end{center}}
+\predate{\begin{center}\small}
+\postdate{\end{center}}
+
+\title{Retrieval Augmented Generation – The Process of Improving Output Using External Resources}
+\author{Sebastian Newberry \quad Endri Islami \quad Parthiv Gajula}
+\date{April 28, 2025}
+
+% ---------- Section Formatting ----------
 \titleformat{\section}{\normalfont\Large\bfseries}{\thesection}{1em}{}
 \titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection}{1em}{}
 \titleformat{\subsubsection}{\normalfont\normalsize\bfseries}{\thesubsubsection}{1em}{}
 
-% ------------ PAGE SETUP ------------
-\geometry{margin=1in}
-\setstretch{1.2}
-
-% ------------ HEADERS ------------
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[L]{Sebastian Newberry, Endri Islami, Parth Gajula}
-\fancyhead[R]{\today}
-\renewcommand{\headrulewidth}{0.4pt}
-
-% ------------ SECTION FORMATTING ------------
-\titleformat{\section}{\normalfont\Large\bfseries}{\thesection}{1em}{}
-\titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection}{1em}{}
-
-% ------------ DOCUMENT TITLE INFO ------------
-\title{
-\rule{\linewidth}{1pt} \\[0.4cm]
-\textbf{\Large What Can Transformers Learn In-Context? A Case Study of Simple Function Classes} \\[0.4cm]
-\rule{\linewidth}{1pt}
-}
-
-\author{}
-\date{}
-
+% ---------- Document ----------
 \begin{document}
-
 \maketitle
 
-% ------------ ABSTRACT ------------
-\vspace{-2em}
-\begin{center}
-\textbf{Abstract}
-\end{center}
-
-\noindent
-In-context learning involves a model’s capacity to utilize a prompt sequence composed of contextual examples (input-output pairs for a specific task) along with a new query input, subsequently generating the corresponding output. Notably, this type of learning occurs solely during inference without any adjustments to the model’s parameters. While Large Language Models (LLMs), like GPT-3, demonstrate some proficiency in in-context learning, the relationship between successful tasks and the training data remains ambiguous...
-
+\begin{abstract}
+RAG stands for Retrieval Augmented Generation, and involves a complex process which starts with retrieving relevant documents. These documents can be broken up into many different forms and used in many different ways depending on the task and desired result that the user expects. Overall, there are two major categories that retrieval tasks can be broken up into. The first is to find and return part of a document that has an exact answer to a user input query, the second is to find a document that answers a user query, and generate a response by passing that document into an LLM as context. Both of these problems become increasingly difficult as the number of documents we have to parse through increases. In order to solve these problems as they become more complex, neural networks are used with retrievers to find and parse relevant documents. Embeddings of documents in varying sizes are stored in a vector database. This allows retriever algorithms to compute similarity scores between query and document embeddings and extract documents that are relevant. In algorithms like REALM, a BERT reader is used to re-rank selected documents for a specific query. Once documents have been ranked, they can be fed into a GPT model to generate text based on the context that is passed from a retriever.
 % ------------ START OF PAPER ------------
+\end{abstract}
 
 \section{Evaluation Method}
 
@@ -65,7 +62,6 @@ In this section, we explain the data, metrics, and the baseline learning algorit
 
 To create the training and test prompts $P = (x_1, f(x_1), \ldots, x_k, f(x_k+1))$ these two steps are followed: First, sample a random function $f$ from the class over $D_F$. Second, generate a set of random inputs $x_1, \ldots, x_{k+1}$ drawn independently from $D_x$ and evaluate $f$ on these inputs.
 
-\vspace{0.5em}
 To have a better idea of the performance of the model, we compare the Transformer performance with three well-known learning algorithms:
 
 \begin{itemize}[leftmargin=2em]
@@ -102,5 +98,21 @@ To train a Transformer, we follow the general structure: given functions $f$ fro
 P = (x_1, f(x_1), \ldots, x_k, f(x_k), x_{k+1})
 \]
 and train a model to anticipate $f(x_{k+1})$.
+
+\begin{wraptable}{l}{0.5\textwidth}
+    \centering
+    \begin{tabular}{|l|c|}
+      \hline
+      \textbf{Method} & \textbf{Accuracy} \\
+      \hline
+      Baseline        & 85.2\% \\
+      Our Model       & \textbf{89.7\%} \\
+      \hline
+    \end{tabular}
+    \caption{Accuracy comparison}
+    \label{tab:wraptable}
+  \end{wraptable}
+  
+  This paragraph will wrap around the table. You can continue writing text here and it will naturally flow around the right-aligned table. This is useful when you want a compact layout, such as in research posters or narrow-column papers.
 
 \end{document}
