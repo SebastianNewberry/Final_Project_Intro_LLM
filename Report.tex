@@ -23,6 +23,7 @@
 \usepackage{titlesec}
 \usepackage{listings}
 \usepackage{xcolor}
+\usepackage{mathtools}
 
 % -------- Python Code ----------
 \lstdefinestyle{mypython}{
@@ -34,6 +35,9 @@
   showstringspaces=false,
   breaklines=true,
 }
+
+% --------- Math Headings --------
+
 
 % ---------- Geometry ----------
 \geometry{
@@ -69,6 +73,10 @@
 
 % ---------- Document ----------
 \begin{document}
+
+\setlength{\abovedisplayskip}{6pt}
+\setlength{\belowdisplayskip}{6pt}
+
 \maketitle
 
 \begin{abstract}
@@ -81,13 +89,36 @@ The objective of this report is to develop a methodology for retrieving relevant
 
 In the following sections, several important concepts will be defined. \textbf{Indexing} refers to the process of organizing and structuring document chunks to enable efficient retrieval. \textbf{Retrieval} denotes the method of selecting the most relevant documents from a larger collection based on a given query. A \textbf{reader} is defined as a model or algorithm that evaluates the relationship between a query and candidate documents. This is often used to re-rank retrieved results. Finally, a \textbf{generator} is a model tasked with creating a coherent response using the information identified during retrieval and reading.
 
+In retrieval systems, two primary encoder architectures are commonly utilized: the bi-encoder and the cross-encoder. A bi-encoder consists of two independently applied BERT models: one encodes the query and the other encodes candidate documents. Each input is processed separately, producing dense vector embeddings that capture the semantic content of either the query or the document. Relevance is then assessed by comparing these embeddings using similarity metrics such as Maximum Inner Product Search (MIPS) or Maximum Cosine Similarity (MCS).
+
+In contrast, a cross-encoder jointly encodes the query and document by concatenating them and processing them together with a single BERT model. Self-attention is computed across both the query and document tokens, allowing for fine-grained interaction between them. A cross-encoder is typically trained to output a single relevance score indicating the degree of match between a query and a document. It can also be trained for more complex tasks, such as predicting the start and end token positions corresponding to an answer span within a document. The differences between these encoder types—and their implications for retrieval and question answering—will be explored in greater detail in the subsequent sections.
+
 \section{Literature Review}
 
+The first significant research on Retrieval-Augmented Generation (RAG) was published in early 2020. During this period, much of the focus in the field was on developing algorithms capable of retrieving and re-ranking documents efficiently, while generation was a secondary concern.
 
-\section{Indexing}
+One of the earliest and most influential approaches was \textbf{REALM} (Retrieval-Augmented Language Model Pre-Training)~\cite{guu2020realm}. REALM employs a bi-encoder architecture, where queries and documents are embedded separately to facilitate efficient retrieval. A key innovation introduced by REALM was the formulation of retrieval as part of a probabilistic framework. Specifically, the probability of producing a correct output \( y \) given an input \( x \) is expressed by marginalizing over possible retrieved documents \( z \):
+\begingroup
+\begin{equation*}
+p(y \mid x) = \sum_{z \in \mathcal{Z}} p(y \mid z, x) \, p(z \mid x)
+\end{equation*}
+\endgroup
+Later in June and September 2020, two more algorithms were developed which were designed to improve the retrival of documents. These algorithms are ColBERT (Contextualized Late Interaction over BERT) and DPR (Dense Passage Retrieval). Each of these algorithms provides a different approach to optimizing the retrieval component \( p(z \mid x) \) within the overall retrieval-augmented framework.
+\noindent
+\section{Problem Definition}
 
+The objective of Retrieval-Augmented Generation (RAG) to generate accurate outputs by leveraging external knowledge retrieved from a large corpus of documents can be mathematically expressed by marginalizing over the possible retrieved documents \( z \) as shown in the equation in the previous section:
+\begin{equation*}
+p(y \mid x) = \sum_{z \in \mathcal{Z}} p(y \mid z, x) \, p(z \mid x)
+\end{equation*}
+Here, \( p(z \mid x) \) denotes the probability of retrieving a relevant document \( z \) given the input \( x \), while \( p(y \mid z, x) \) denotes the probability of generating the correct output \( y \) conditioned on both the input and the retrieved document. This formulation separates the retrieval and generation components of the RAG pipeline and emphasizes the importance of jointly optimizing both stages to maximize overall performance.
+
+In practice, retrieval models aim to maximize \( p(z \mid x) \) by selecting the most relevant documents from a corpus, while generation models aim to maximize \( p(y \mid z, x) \) by producing accurate and contextually appropriate outputs based on the retrieved information.
+
+\section{Evaluation Method}
+
+\subsection{Indexing}
 Indexing is a foundational step in the Retrieval-Augmented Generation (RAG) pipeline, responsible for transforming raw data into a structured format suitable for efficient retrieval. It begins by extracting and cleaning documents from varied formats—such as PDF, HTML, and Markdown—into plain text. To accommodate the limited context windows of language models, the text is segmented into smaller, semantically meaningful chunks. These chunks are then embedded into vector representations using an embedding model and stored in a vector database for fast similarity-based retrieval during inference (Gao et al.).
-
 \begin{figure}[H]
     \centering
      \includegraphics[width=\linewidth]{firstimage.jpg}
@@ -248,6 +279,7 @@ CONTRIE-VER & Sentence-level & Dense unsupervised & Domain adaptation \\
 
 \section{Retrieval}
 
-
+\bibliographystyle{plain}
+\bibliography{references}
 
 \end{document}
