@@ -87,26 +87,77 @@
 
 The objective of this report is to develop a methodology for retrieving relevant information from a corpus of documents and either leveraging it alongside a generation model to produce accurate responses to user prompts, or finding an exact answer in a huge corpus of documents. Before delving into the detailed mechanics of both of these approaches, it is important to establish key terminology that will be referenced throughout the paper.
 
-In the following sections, several important concepts will be defined. \textbf{Indexing} refers to the process of organizing and structuring document chunks to enable efficient retrieval. \textbf{Retrieval} denotes the method of selecting the most relevant documents from a larger collection based on a given query. A \textbf{reader} is defined as a model or algorithm that evaluates the relationship between a query and candidate documents. This is often used to re-rank retrieved results. Finally, a \textbf{generator} is a model tasked with creating a coherent response using the information identified during retrieval and reading.
+In the following sections, several important concepts will be defined. \textbf{Indexing} refers to the process of organizing and structuring document chunks to enable efficient retrieval. \textbf{Retrieval} denotes the method of selecting the most relevant documents from a larger collection based on a given query. A \textbf{reader} is defined as a model or algorithm that evaluates the relationship between a query and candidate documents. Finally, a \textbf{generator} is a model tasked with creating a coherent response using the information identified during retrieval and reading.
 
 In retrieval systems, two primary encoder architectures are commonly utilized: the bi-encoder and the cross-encoder. A bi-encoder consists of two independently applied BERT models: one encodes the query and the other encodes candidate documents. Each input is processed separately, producing dense vector embeddings that capture the semantic content of either the query or the document. Relevance is then assessed by comparing these embeddings using similarity metrics such as Maximum Inner Product Search (MIPS) or Maximum Cosine Similarity (MCS).
 
-In contrast, a cross-encoder jointly encodes the query and document by concatenating them and processing them together with a single BERT model. Self-attention is computed across both the query and document tokens, allowing for fine-grained interaction between them. A cross-encoder is typically trained to output a single relevance score indicating the degree of match between a query and a document. It can also be trained for more complex tasks, such as predicting the start and end token positions corresponding to an answer span within a document. The differences between these encoder types—and their implications for retrieval and question answering—will be explored in greater detail in the subsequent sections.
+In contrast, a cross-encoder jointly encodes the query and document by concatenating them and processing them together with a single BERT model. Self-attention is computed across both the query and document tokens, allowing for fine-grained interaction between them. A cross-encoder is typically trained to output a single relevance score indicating the degree of match between a query and a document. It can also be trained for more complex tasks, such as predicting the start and end token positions corresponding to an answer span within a document.
+
+Although cross-encoders are highly effective at modeling fine-grained contextual similarities between queries and documents, they are computationally infeasible to use for large-scale retrieval. Evaluating a query against every document in a corpus would require running full self-attention across millions or billions of document-query pairs, which is prohibitively expensive in both time and computational resources. As a result, most retrieval systems rely on bi-encoder architectures for initial retrieval, sacrificing some fine-grained matching ability in exchange for scalability and efficiency.
 
 \section{Literature Review}
 
-The first significant research on Retrieval-Augmented Generation (RAG) was published in early 2020. During this period, much of the focus in the field was on developing algorithms capable of retrieving and re-ranking documents efficiently, while generation was a secondary concern.
+The first significant research on Retrieval-Augmented Generation (RAG) was published in early 2020. During this period, much of the focus in the field was on developing algorithms capable of retrieving and ranking documents efficiently, while generation remained a secondary concern.
 
-One of the earliest and most influential approaches was \textbf{REALM} (Retrieval-Augmented Language Model Pre-Training)~\cite{guu2020realm}. REALM employs a bi-encoder architecture, where queries and documents are embedded separately to facilitate efficient retrieval. A key innovation introduced by REALM was the formulation of retrieval as part of a probabilistic framework. Specifically, the probability of producing a correct output \( y \) given an input \( x \) is expressed by marginalizing over possible retrieved documents \( z \):
-\begingroup
+One of the earliest and most influential approaches was \textbf{REALM} (Retrieval-Augmented Language Model Pre-Training)~\cite{guu2020realm}. REALM employs a bi-encoder architecture, where queries and documents are embedded separately to facilitate efficient retrieval. A key contribution introduced by REALM was the formulation of retrieval as part of a probabilistic framework. Specifically, the probability of producing a correct output \( y \) given an input \( x \) is expressed by marginalizing over possible retrieved documents \( z \):
 \begin{equation*}
 p(y \mid x) = \sum_{z \in \mathcal{Z}} p(y \mid z, x) \, p(z \mid x)
 \end{equation*}
-\endgroup
-Later in June and September 2020, two more algorithms were developed which were designed to improve the retrival of documents. These algorithms are ColBERT (Contextualized Late Interaction over BERT) and DPR (Dense Passage Retrieval). Each of these algorithms provides a different approach to optimizing the retrieval component \( p(z \mid x) \) within the overall retrieval-augmented framework.
-\noindent
-\section{Problem Definition}
 
+REALM is specifically designed for tasks involving the identification of an exact answer span to a prompt within a document, predicting masked tokens, or finding additional context to be used for Open-Domain Question Answering (Open-QA). To support retrieval, REALM uses a bi-encoder-based \textbf{neural knowledge retriever}, embedding queries and documents separately. Both the query encoder and, optionally, the document encoder are trained during pretraining. Because updating the document encoder during training causes the document embeddings to become stale, REALM periodically re-embeds and re-indexes all documents every several hundred training steps to maintain retrieval consistency.
+
+After retrieving the top-\(k\) documents for a query, a \textbf{knowledge-augmented encoder} is applied to each document separately. This reader model predicts a probability distribution over possible start and end positions for the answer span within each document. The final output is selected as the span with the highest predicted probability across all retrieved documents. For this component, REALM employs a cross-encoder architecture by concatenating the query and document, allowing the model to compute fine-grained contextual interactions between query and document passages.
+
+
+Later in June and September 2020, two additional algorithms were developed to improve the retrieval component of retrieval-augmented generation frameworks. These algorithms are \textbf{ColBERT} (Contextualized Late Interaction over BERT) and \textbf{DPR} (Dense Passage Retrieval). Each provides a different approach to optimizing the retrieval probability \( p(z \mid x) \) within the RAG framework.
+
+\textbf{DPR}~\cite{karpukhin2020dense} is designed to embed large passages into dense vector representations, which can then be efficiently stored and retrieved from a vector database. Compared to REALM, DPR introduces a key innovation: the use of contrastive learning to better supervise the retriever. In DPR, the model is trained to maximize the similarity between a query and its corresponding positive passage while minimizing similarity with negative passages. The paper introduces three methods for sampling negative passages during training:
+
+\begin{itemize}
+    \item \textbf{Random negatives:} Randomly selected passages that do not contain the correct answer.
+    \item \textbf{BM25 negatives:} Top-ranked passages returned by a BM25 search that match many question tokens but do not contain the answer.
+    \item \textbf{Gold negatives:} Passages that serve as positive examples for other questions in the training dataset.
+\end{itemize}
+
+\textbf{ColBERT}~\cite{khattab2020colbert} introduces a new approach to retrieval that differs from traditional dense retrievers. Like other retrieval algorithms, ColBERT uses a bi-encoder architecture where queries and documents are encoded separately using BERT. However, instead of pooling document or query representations into a single vector, ColBERT preserves token-level embeddings for both queries and documents. 
+
+Each document token is independently encoded and stored in a compressed vector index. At retrieval time, each query token is encoded separately, and the similarity between a query and a document is computed through a late interaction mechanism. Specifically, for each query token, the maximum similarity with any document token is computed, and the overall score is the product of these maximum similarities:
+
+\begin{equation*}
+S_{q,d} := \prod_{i \in [|E_q|]} \max_{j \in [|E_d|]} E_{q_i} \cdot E_{d_j}
+\end{equation*}
+
+Unlike traditional cross-encoders that jointly attend over both queries and documents, ColBERT focuses on independent token-level matching. While this design allows for highly efficient retrieval over lots of tokens, it also means that ColBERT captures token-level relevance without modeling full cross-token contextualization between the query and document.
+This means that ColBERT can be bad at understanding context of a sentence and instead often times only understands the meaning of tokens in documents but not exactly the entire context they are used in.
+
+ColBERT also uses the same contrastive learning that DPR uses. ColBERT built on this contrastive learning by using relevance guided supervision. ~\cite{khattab2021relevance} This method is intended to solve the problem of finding negative samples to compare against when training ColBERT.
+It works by finding negative samples in an initial ColBERT model with a sparse vector retrieval algorithm like BM25, then once the ColBERT retriever gets trained once, a new retriever is created that bases its negative samples off of the previous trained retriever.
+In other words, after a certain batch of samples, a ColBERT retriever model will learn the bad samples, then a new ColBERT retriever will be created that uses the previous, partially trained retriever to find negative samples.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{ColBERT_OpenQA.png}
+    \caption{Top: This figure showcases ColBERT token-by-token similarity search across all documents one query token at a time. Bottom: This figure shows ColBERT retrievers being trained based on negative samples coming from previous retrievers.}
+    \label{fig:indexing-process}
+\end{figure}
+
+Later in February 2022, research for one of the first generation focused models came out. This model is called \textbf{RETRO} (Retrieval Enhanced Transformer) ~\cite{borgeaud2022improving}. This model separates an input into chunks, and fetches appropriate top-k documents for each chunk. It uses the traditional bi-encoder architecture to retrieve documents, then passes the original query through a self-attention layer to learn context, then the documents through cross-attention with the learned query embeddings to
+an autoregressive decoder. This part of the process is called chunked cross attention. During chunked cross attention, subsequent tokens are generated only based on previous tokens just like a GPT model, but documents that were fetched from the previous chunk are used with cross attention. Cross attention occurs with the last token of the previous chunk and first 4 tokens of the next chunk in this specific implementation:
+
+\begin{figure}[H]
+    \centering
+     \includegraphics[width=\linewidth]{RETRO_CCA.png}
+    \caption{Left: simplified version where a sequence of length \(n\) = 12 is split into \(l\) = 3 chunks of size \(m\) = 4. For each chunk, we retrieve \(k\) = 2 neighbours of \(r\) = 5 tokens each. Theretrieval pathway is shown on top. Right: Details of the interactions in the Cca operator. Causality is maintained as neighbours of the first chunk only affect the last token of the first chunk and tokens from the second chunk.}
+    \label{fig:indexing-process}
+\end{figure}
+
+This version of crossed chunk attention allows for retrieving relevant documents, and also generating portions of text based on the next chunk of query tokens, along with documents that are relevant to the previous input.
+One downside of RETRO is that it isn't compatible with pre-trained LLMs like LLAMA or GPT. In order to use it, the decoder part of this algorithm must be trained from scratch, and the retriever is typically pre-trained already, so only the generation portion of this algorithm is trained.
+
+In August 2022, one of the first retrieval models that doesn't require labeled data to learn was developed. This retrieval model called Contriever was developed by Meta. ~\cite{izacard2022unsupervised} This retriever is unique because it utilizes self-supervised learning in order to train itself.
+It doesn't need a labeled positive and negative document pair in order to learn.
+
+\section{Problem Statement}
 The objective of Retrieval-Augmented Generation (RAG) to generate accurate outputs by leveraging external knowledge retrieved from a large corpus of documents can be mathematically expressed by marginalizing over the possible retrieved documents \( z \) as shown in the equation in the previous section:
 \begin{equation*}
 p(y \mid x) = \sum_{z \in \mathcal{Z}} p(y \mid z, x) \, p(z \mid x)
@@ -276,8 +327,6 @@ CONTRIE-VER & Sentence-level & Dense unsupervised & Domain adaptation \\
 \label{tab:embedding-models}
 \end{table}
 
-
-\section{Retrieval}
 \section{Experimental Results}
 
 \section{Conclusion}
