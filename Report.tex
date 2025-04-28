@@ -108,7 +108,6 @@ REALM is specifically designed for tasks involving the identification of an exac
 
 After retrieving the top-\(k\) documents for a query, a \textbf{knowledge-augmented encoder} is applied to each document separately. This reader model predicts a probability distribution over possible start and end positions for the answer span within each document. The final output is selected as the span with the highest predicted probability across all retrieved documents. For this component, REALM employs a cross-encoder architecture by concatenating the query and document, allowing the model to compute fine-grained contextual interactions between query and document passages.
 
-
 Later in June and September 2020, two additional algorithms were developed to improve the retrieval component of retrieval-augmented generation frameworks. These algorithms are \textbf{ColBERT} (Contextualized Late Interaction over BERT) and \textbf{DPR} (Dense Passage Retrieval). Each provides a different approach to optimizing the retrieval probability \( p(z \mid x) \) within the RAG framework.
 
 \textbf{DPR}~\cite{karpukhin2020dense} is designed to embed large passages into dense vector representations, which can then be efficiently stored and retrieved from a vector database. Compared to REALM, DPR introduces a key innovation: the use of contrastive learning to better supervise the retriever. In DPR, the model is trained to maximize the similarity between a query and its corresponding positive passage while minimizing similarity with negative passages. The paper introduces three methods for sampling negative passages during training:
@@ -122,11 +121,9 @@ Later in June and September 2020, two additional algorithms were developed to im
 \textbf{ColBERT}~\cite{khattab2020colbert} introduces a new approach to retrieval that differs from traditional dense retrievers. Like other retrieval algorithms, ColBERT uses a bi-encoder architecture where queries and documents are encoded separately using BERT. However, instead of pooling document or query representations into a single vector, ColBERT preserves token-level embeddings for both queries and documents. 
 
 Each document token is independently encoded and stored in a compressed vector index. At retrieval time, each query token is encoded separately, and the similarity between a query and a document is computed through a late interaction mechanism. Specifically, for each query token, the maximum similarity with any document token is computed, and the overall score is the product of these maximum similarities:
-
 \begin{equation*}
 S_{q,d} := \prod_{i \in [|E_q|]} \max_{j \in [|E_d|]} E_{q_i} \cdot E_{d_j}
 \end{equation*}
-
 Unlike traditional cross-encoders that jointly attend over both queries and documents, ColBERT focuses on independent token-level matching. While this design allows for highly efficient retrieval over lots of tokens, it also means that ColBERT captures token-level relevance without modeling full cross-token contextualization between the query and document.
 This means that ColBERT can be bad at understanding context of a sentence and instead often times only understands the meaning of tokens in documents but not exactly the entire context they are used in.
 
@@ -141,7 +138,14 @@ In other words, after a certain batch of samples, a ColBERT retriever model will
     \label{fig:indexing-process}
 \end{figure}
 
-Later in February 2022, research for one of the first generation focused models came out. This model is called \textbf{RETRO} (Retrieval Enhanced Transformer) ~\cite{borgeaud2022improving}. This model separates an input into chunks, and fetches appropriate top-k documents for each chunk. It uses the traditional bi-encoder architecture to retrieve documents, then passes the original query through a self-attention layer to learn context, then the documents through cross-attention with the learned query embeddings to
+In April 2021, a model designed to both retrieve and generate text was developed. This model was \textbf{RAG} and was developed by Meta ~\cite{lewis2021retrieval}. Meta came up with two methods to effectively compute loss for retrieving documents based on queries, and generating text to answer a prompt. This model uses a BART encoder-decoder in order to both interpret context in documents for re-ranking,
+and generate a unique answer based on the context that is passed to the BART encoder through cross-attention. The model also uses a DPR retriever that can be trained or already pre-trained.
+\begin{itemize}
+    \item \textbf{RAG-Sequence:} Uses the same retrieved documents to generate a complete sequence. Doesn't re-rank the top-k documents. Creates the entire probability distribution of an entire sequence coming out of all documents. Then multiplies that with the probability of the generator coming up with the correct token using the previous tokens and selected document. A summation is then taken over all tokens.
+    \item \textbf{RAG-Token:} Uses the same retrieved documents to generate the complete sequence, but it does re-rank the top-k documents for every token. Re-creates a probability distribution of relevant documents for every token that gets generated. This then gets multiplied by the probability of generating the correct subsequent token based on previous tokens and the selected document. The summation comes first in this model, then the product to find the probability to generate the entire correct sequence comes afterwards because every token probability is found independently from one another.
+\end{itemize}
+
+Later in February 2022, research for another generation model came out. This model is called \textbf{RETRO} (Retrieval Enhanced Transformer) ~\cite{borgeaud2022improving}. This model separates an input into chunks, and fetches appropriate top-k documents for each chunk. It uses the traditional bi-encoder architecture to retrieve documents, then passes the original query through a self-attention layer to learn context, then the documents through cross-attention with the learned query embeddings to
 an autoregressive decoder. This part of the process is called chunked cross attention. During chunked cross attention, subsequent tokens are generated only based on previous tokens just like a GPT model, but documents that were fetched from the previous chunk are used with cross attention. Cross attention occurs with the last token of the previous chunk and first 4 tokens of the next chunk in this specific implementation:
 
 \begin{figure}[H]
@@ -154,8 +158,69 @@ an autoregressive decoder. This part of the process is called chunked cross atte
 This version of crossed chunk attention allows for retrieving relevant documents, and also generating portions of text based on the next chunk of query tokens, along with documents that are relevant to the previous input.
 One downside of RETRO is that it isn't compatible with pre-trained LLMs like LLAMA or GPT. In order to use it, the decoder part of this algorithm must be trained from scratch, and the retriever is typically pre-trained already, so only the generation portion of this algorithm is trained.
 
-In August 2022, one of the first retrieval models that doesn't require labeled data to learn was developed. This retrieval model called Contriever was developed by Meta. ~\cite{izacard2022unsupervised} This retriever is unique because it utilizes self-supervised learning in order to train itself.
-It doesn't need a labeled positive and negative document pair in order to learn.
+In August 2022, Meta developed Contriever~\cite{izacard2022unsupervised}, one of the first highly effective retrieval models that does not require labeled data to train.
+
+Contriever is unique because it uses self-supervised contrastive learning to train itself without manually labeled positive or negative pairs. Instead, it applies a self-supervised denoising objective: given a document, two noisy views are created by randomly masking parts of the text. These two views are treated as a positive pair, while other documents in the batch serve as negatives.
+
+During training, Contriever uses cosine similarity to measure how close two embeddings are. The model is trained with a contrastive loss that pulls together the positive pairs (high similarity) and pushes apart the negatives (low similarity).
+
+Additionally, Contriever uses the same encoder for both queries and documents, unlike many earlier retrieval models that used separate encoders. Because it is not trained with domain-specific labels or tasks, Contriever remains highly domain-agnostic and adaptable to a wide variety of documents and retrieval tasks. It achieves state-of-the-art performance in zero-shot retrieval settings, where the model must retrieve relevant documents from domains it has never seen during training.
+
+In December 2022, a model called \textbf{FiD} (Fusion-in-Decoder) was introduced to improve retrieval-augmented generation by more effectively leveraging multiple retrieved passages~\cite{deJong2022FiDO}.  
+Instead of fusing passages early, FiD encodes each retrieved passage independently after prepending the query to each one.  
+The encoder produces contextual embeddings for each (query, passage) pair separately.  
+These encoded representations are then combined in the decoder, where cross-attention is performed over all encoded passages simultaneously to generate the output sequence.
+
+In May 2023, an RAG implementation that contrasts RETRO was developed. This implementation is called \textbf{REPLUG} (Retrieve and Plug) ~\cite{shi2023replug}. The idea behind this is to use a pre-trained large language model, and treat the LLM as a black box. This means that the large language model is not trained.
+The idea behind REPLUG is to train the retriever. In order to do this, two probability distributions are created. The first is the LLM probability that determines whether given an expected output and a query, how relevant is a document:
+\begin{equation*}
+Q(d \mid x, y) = \frac{e^{\text{PLM}(y \mid d, x) / \beta}}{\sum_{d' \in D'} e^{\text{PLM}(y \mid d', x) / \beta}}
+\end{equation*}
+Then another probability distribution is created, which finds that given a query, how relevant does the retriever think a document is:
+\begin{equation*}
+P_R(d \mid x) = \frac{e^{s(d,x)/\gamma}}{\sum_{d' \in D'} e^{s(d',x)/\gamma}}
+\end{equation*}
+Lastly, in order to train the retrieval, the loss function that is used is a KL divergence between these two distributions:
+\begin{equation*}
+\mathcal{L} = \frac{1}{|B|} \sum_{x \in B} \text{KL}\left( P_R(d \mid x) \, \| \, Q_{\text{LM}}(d \mid x, y) \right)
+\end{equation*}
+To put it simply, these equations are basically trusting that the LLM is correct in determining whether a specific document is relevant for a pair of inputs and outputs, and is using the output of the LLM to generate a loss for the retriever.
+
+
+Lastly, In October 2023, research began shifting focus from merely optimizing retrieval algorithms to empowering large language models (LLMs) to decide when and how to use retrieved documents.  
+\textbf{SELF-RAG} was introduced to address this new objective~\cite{asai2023selfrag}.  
+SELF-RAG extends traditional retrieval-augmented generation by adding a self-reflection mechanism: the model not only generates the next token but also predicts auxiliary signals indicating its use of retrieved documents.  
+Training combines standard language modeling objectives with additional self-supervised signals, without requiring human-annotated labels.
+
+Specifically, the model predicts three types of auxiliary critique signals during decoding:
+
+\begin{itemize}
+    \item \textbf{isREL:} Whether the retrieved document is relevant to the input prompt.
+    \item \textbf{isSUPP:} Whether the retrieved document supports the model's generated output.
+    \item \textbf{isUSE:} Whether the model actually uses the document during generation.
+\end{itemize}
+
+During decoding, the model simultaneously predicts both the next token and the critique signals.  
+The scoring function for each token combines the generation probability and a critique-based score:
+
+\begin{equation*}
+f(y_t, d, \mathcal{C}) = p(y_t \mid x, d, y_{<t}) + S(\mathcal{C})
+\end{equation*}
+
+where the critique score \(S(\mathcal{C})\) is defined as:
+
+\begin{equation*}
+S(\mathcal{C}) = \sum_{G \in \mathcal{G}} w_G \, s^G_t \quad \text{for} \quad \mathcal{G} = \{ \text{ISREL}, \text{ISSUP}, \text{ISUSE} \}
+\end{equation*}
+
+The model is trained to maximize the expected joint likelihood of generating correct outputs and accurate critique predictions:
+
+\begin{equation*}
+\max_{M} \mathbb{E}_{(x, y, r) \sim \mathcal{D}_{\text{gen}}} \left[ \log p_{M}(y, r \mid x) \right]
+\end{equation*}
+
+Correct predictions of the isREL, isSUPP, and isUSE signals lead to a lower loss, encouraging the model to appropriately incorporate retrieved information.  
+Incorrect predictions result in a higher loss, discouraging reliance on irrelevant or unsupportive documents.
 
 \section{Problem Statement}
 The objective of Retrieval-Augmented Generation (RAG) to generate accurate outputs by leveraging external knowledge retrieved from a large corpus of documents can be mathematically expressed by marginalizing over the possible retrieved documents \( z \) as shown in the equation in the previous section:
@@ -166,13 +231,34 @@ Here, \( p(z \mid x) \) denotes the probability of retrieving a relevant documen
 
 In practice, retrieval models aim to maximize \( p(z \mid x) \) by selecting the most relevant documents from a corpus, while generation models aim to maximize \( p(y \mid z, x) \) by producing accurate and contextually appropriate outputs based on the retrieved information.
 
+RAG introduces new optimization objectives by combining dense retrieval with autoregressive generation.  
+For the \textbf{RAG-Sequence} model, a fixed set of top-k documents is retrieved once based on the input query. The model then generates an entire output sequence conditioned on each document independently, and marginalizes over documents after modeling the full sequence probability:
+\begin{equation*}
+p_{\text{RAG-Sequence}}(y \mid x) \approx \sum_{z \in \text{top-k}(p(\cdot \mid x))} p_{\eta}(z \mid x) \prod_{i=1}^{N} p_{\theta}(y_i \mid x, z, y_{1:i-1})
+\end{equation*}
+In the \textbf{RAG-Token} model, the same set of retrieved documents is used, but document contributions are dynamically re-weighted at each token generation step. This leads to a different loss formulation where marginalization over documents occurs independently for each token:
+\begin{equation*}
+p_{\text{RAG-Token}}(y \mid x) \approx \prod_{i=1}^{N} \sum_{z \in \text{top-k}(p(\cdot \mid x))} p_{\eta}(z \mid x) \, p_{\theta}(y_i \mid x, z, y_{1:i-1})
+\end{equation*}
+As a result, the summation over documents occurs inside the product over tokens in RAG-Token, whereas it occurs outside in RAG-Sequence.
+
+
+Additionally, contrastive loss is used extensively in many of the retrieval methods defined above. The purpose of contrastive loss is to reduce similarity given to negative samples, and maximize similarity given to positive samples:
+
+\begin{equation*}
+\mathcal{L}(q, k^+) = -\frac{ \exp\left( s(q, k^+) / \tau \right) }{ \exp\left( s(q, k^+) / \tau \right) + \sum_{i=1}^{K} \exp\left( s(q, k_i) / \tau \right) }
+\end{equation*}
+
+Positive and negative samples can mean different things depending on the retrieval algorithm used. For the contriever, a positive sample is the same document that is masked with random noise, and a negative sample is a completely different document.
+For ColBERT a negative sample is a specific document token embedding that doesn't match with a query token embedding, and a positive sample is one that does match. For DPR, a negative loss is a single passage in a document that doesn't match with the entire
+query contextual embedding.
 \section{Evaluation Method}
 
 \subsection{Indexing}
 Indexing is a foundational step in the Retrieval-Augmented Generation (RAG) pipeline, responsible for transforming raw data into a structured format suitable for efficient retrieval. It begins by extracting and cleaning documents from varied formats—such as PDF, HTML, and Markdown—into plain text. To accommodate the limited context windows of language models, the text is segmented into smaller, semantically meaningful chunks. These chunks are then embedded into vector representations using an embedding model and stored in a vector database for fast similarity-based retrieval during inference (Gao et al.).
 \begin{figure}[H]
     \centering
-     \includegraphics[width=\linewidth]{firstimage.jpg}
+     \includegraphics[width=0.5\linewidth]{firstimage.jpg}
     \caption{}
     \label{fig:indexing-process}
 \end{figure}
@@ -248,7 +334,7 @@ After documents are split into semantically coherent chunks, the next stage in t
 
 \subsection{Purpose of Embedding}
 
-Embedding serves as a bridge between unstructured textual information and structured numerical computation. By encoding each chunk into a dense vector, embedding models enable similarity comparisons based on vector proximity (e.g., cosine similarity or dot product), rather than relying solely on keyword overlap. This transformation is essential because it allows RAG systems to compare the semantic meaning of queries and documents, rather than just their surface-level lexical content This transformation is essential because it allows RAG systems to compare the semantic meaning of queries and documents, rather than just their surface-level lexical content.
+Embedding serves as a bridge between unstructured textual information and structured numerical computation. By encoding each chunk into a dense vector, embedding models enable similarity comparisons based on vector proximity (e.g., cosine similarity or dot product), rather than relying solely on keyword overlap. This transformation is essential because it allows RAG systems to compare the semantic meaning of queries and documents, rather than just their surface-level lexical content.
 
 \subsection{Types of Representations}
 
@@ -326,6 +412,8 @@ CONTRIE-VER & Sentence-level & Dense unsupervised & Domain adaptation \\
 \caption{}
 \label{tab:embedding-models}
 \end{table}
+
+\section{Dataset Details}
 
 \section{Experimental Results}
 
